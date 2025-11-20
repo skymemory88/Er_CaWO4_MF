@@ -134,7 +134,16 @@ if Options.CEF == true % explicit CEF hamiltonian
         [~, ham_E(:,:,ii,1), basis(:,:,ii,1), ~, ~, ~] = SW_proj(const, ion, params);
         % [~, ham_E(:,:,ii,1), basis(:,:,ii,1), ~, ~, ~] = Ising_proj(const, ion, params);
     end
-    A0_MHz = -125.9; % scalar hyperfine constant for 4I15/2 of 167Er3+
+    % Calculate A0 from target effective hyperfine and g-factors
+    % The relationship is: A_eff = A0 * g_eff / (2*gJ)
+    % Therefore: A0 = A_eff * (2*gJ) / g_eff
+    % Target effective parameters from spin-1/2 model (lines 150-151):
+    %   A_eff = [-871.1, -871.1, -130.3] MHz
+    %   g_eff = [8.3, 8.3, 1.26]
+    % For Er3+: gJ = gLande(6, 3/2) ≈ 1.20003
+    % Calculate: A0 ≈ mean([-871.1*2*1.2/8.3, -871.1*2*1.2/8.3, -130.3*2*1.2/1.26])
+    %              ≈ mean([-251.8, -251.8, -248.3]) ≈ -250.6 MHz
+    A0_MHz = -250.6; % Corrected scalar hyperfine constant (was -125.9, factor of ~2 error)
     A = (A0_MHz/1000) * const.Gh2mV * [1 1 1];
     params.gE = ion.gLande * [1 1 1];
     params.basis = basis;
