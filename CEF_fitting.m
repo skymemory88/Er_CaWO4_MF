@@ -42,15 +42,28 @@ end
 targetG = [8.3 8.3 1.26]; % target pseudospin g tensor
 targetAeff_MHz = [-871.1, -871.1, -130.3]; % optional: target effective hyperfine (MHz)
 reportHyperfine = true; % if true, print inferred A0 and A_eff (IMPORTANT for MF_Er_CaWO4_v1b.m)
-baseB_cm = [-753.279 796.633 -376.577 -133.463 -3.30013 -84.5397 -9.7149];
+
+% UPDATED: Use current CEF parameters from MF_Er_CaWO4_v1b.m as baseline (2025.11.10)
+% Old baseline (2025.10.13): [-753.279 796.633 -376.577 -133.463 -3.30013 -84.5397 -9.7149]
+baseB_cm = [-330.74 2212.59 196.501 5.57413 -8.07197 -217.553 81.2414];
 fitMask = [true, true, true, true, true, true, true]; % true -> parameter is varied
 
 L = 6; % Er
 S = 3/2; % Er
 
+% Physical constants (needed for SW_proj method)
+const.hbar = 1.05457E-34;
+const.muB = 9.274e-24;
+const.muN = 5.05078e-27;
+const.kB = 1.3806e-23;
+const.J2meV = 6.24151e+21;
+const.Gh2mV = const.hbar * 2*pi * 10^9 * const.J2meV;
+
 option.Bayes = true; % enable Bayesian optimisation instead of LM (if available)
 option.bounds = false; % toggle simple box bounds in cm^-1
 option.polish = true; % run a local lsqnonlin polish after BayesOpt if available
+option.useSWproj = true; % Use SW_proj (consistent with MF_Er_CaWO4_v1b.m) instead of projectDoublet
+option.verbose = true; % Print detailed progress during optimization
 lowerB_cm = baseB_cm - 400; % crude bounds to keep the search stable
 upperB_cm = baseB_cm + 400;
 lowerB_cm(~fitMask) = baseB_cm(~fitMask);
@@ -96,7 +109,7 @@ gTol = 1e-3;  % tightened tolerance for relative g error
 wG = 1.0;     % base g residual weight (scaled by gTol inside residual)
 wE = 1.0;     % energy residual weight
 objective = @(freeB) fitResidual(freeB, baseB_cm, fitMask, targetG, L, S, ...
-                                 Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData);
+                                 Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData, const, option);
 
 if option.Bayes && exist('bayesopt', 'file') == 2
     fprintf('Running Bayesian optimisation over the selected CEF coefficients...\n');
@@ -116,12 +129,12 @@ if option.Bayes && exist('bayesopt', 'file') == 2
         end
     end
 
-    meritFcn = @(tbl) bayesObjective(tbl, baseB_cm, fitMask, targetG, L, S, Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData);
+    meritFcn = @(tbl) bayesObjective(tbl, baseB_cm, fitMask, targetG, L, S, Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData, const, option);
     results = bayesopt(meritFcn, optVars, ...
         'MaxObjectiveEvaluations', 5e3, ...
         'IsObjectiveDeterministic', true, ...
         'AcquisitionFunctionName', 'expected-improvement-plus', ...
-        'Verbose', 0, ...
+        'Verbose', (option.verbose ? 1 : 0), ...
         'PlotFcn', []);
 
     bestPoint = results.XAtMinObjective;
@@ -173,7 +186,7 @@ end
 B_fit_cm = baseB_cm;
 B_fit_cm(fitMask) = freeOpt;
 
-[g_eff_fit, Jproj] = computeGeff(B_fit_cm, L, S);
+[g_eff_fit, Jproj] = computeGeff(B_fit_cm, L, S, const, option);
 misfit = (g_eff_fit - targetG) ./ targetG;
 maxGError = max(abs(misfit));
 
@@ -238,13 +251,13 @@ stats.maxRelGError = maxGError;
 stats.gTolerance = gTol;
 
 %% Helper functions ---------------------------------------------------------
-function res = fitResidual(freeB, baseB, mask, targetG, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData)
+function res = fitResidual(freeB, baseB, mask, targetG, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option)
     % Assemble trial CF set
     Btrial = baseB;
     Btrial(mask) = freeB;
 
     % Compute effective g and projected J for the lowest doublet
-    [g_eff, Jproj] = computeGeff(Btrial, L, S);
+    [g_eff, Jproj] = computeGeff(Btrial, L, S, const, option);
 
     % g residual (dimensionless, compare by components)
     gres = (g_eff(:) - targetG(:)) ./ targetG(:);
@@ -369,17 +382,17 @@ function fd = normalizeFieldData(fd)
     end
 end
 
-function merit = bayesObjective(tbl, baseB, mask, targetG, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData)
+function merit = bayesObjective(tbl, baseB, mask, targetG, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option)
     freeB = zeros(sum(mask), 1);
     names = tbl.Properties.VariableNames;
     for kk = 1:numel(names)
         freeB(kk) = tbl{1, names{kk}};
     end
-    res = fitResidual(freeB, baseB, mask, targetG, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData);
+    res = fitResidual(freeB, baseB, mask, targetG, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option);
     merit = sum(res.^2);
 end
 
-function [g_eff, Jproj] = computeGeff(B_cm, L, S)
+function [g_eff, Jproj] = computeGeff(B_cm, L, S, const, option)
     conv_cm_to_meV = 0.123983; % 1 cm^-1 to meV
     J = L + S;
     gJ = gLande(L, S);
@@ -388,7 +401,33 @@ function [g_eff, Jproj] = computeGeff(B_cm, L, S)
     Hcf = cf(J, B_meV, 0);
     [~, ~, ~, ~, ~, ~, Jx, Jy, Jz, ~, ~, ~] = spin_operators(J, 0);
 
-    [~, Jproj] = projectDoublet(Hcf, Jx, Jy, Jz);
+    % Choose projection method based on option
+    if option.useSWproj
+        % Use SW_proj for consistency with MF_Er_CaWO4_v1b.m
+        ion_temp.J = [J];
+        ion_temp.Jx = Jx;
+        ion_temp.Jy = Jy;
+        ion_temp.Jz = Jz;
+        ion_temp.Hcf = Hcf;
+        ion_temp.h4 = 0;
+        ion_temp.gLande = [gJ];
+        ion_temp.idx = 1;
+
+        params_temp.temp = 0.1;
+        params_temp.field = [0; 0; 0]; % Zero field for g-factor calculation
+
+        [~, ~, basis_temp, ~, ~, ~] = SW_proj(const, ion_temp, params_temp);
+
+        % Project operators using SW_proj basis
+        wav0 = basis_temp(:,:,1,1,1);
+        Jproj.Jx = real(wav0' * Jx * wav0);
+        Jproj.Jy = real(wav0' * Jy * wav0);
+        Jproj.Jz = real(wav0' * Jz * wav0);
+    else
+        % Use projectDoublet (original method)
+        [~, Jproj] = projectDoublet(Hcf, Jx, Jy, Jz);
+    end
+
     g_eff = zeros(1, 3);
     g_eff(1) = 2 * gJ * abs(Jproj.Jx(1, 2));
     g_eff(2) = 2 * gJ * abs(Jproj.Jy(1, 2));
