@@ -112,8 +112,8 @@ if Options.CEF == true % explicit CEF hamiltonian
     % B = [ 145.3067    4.1297   22.5464    0.0153   -0.0198    0.4539   -0.0002];  % [cm^-1] arXiv:2412.03948 (2025)-3
     % B = [ 129.9484   -3.7035  -22.5857    0.0186    0.0118   -0.4555   -0.0011];  % [cm^-1] arXiv:2412.03948 (2025)-4
     
-    % B = [-979.402 1898.05 346.52 -272.893 -7.86205 -187.516 58.9021]; % 2025.11.02
-    B = [-330.74 2212.59 196.501 5.57413 -8.07197 -217.553 81.2414]; % 2025.11.10
+    B = [-979.402 1898.05 346.52 -272.893 -7.86205 -187.516 58.9021]; % 2025.11.02
+    % B = [-330.74 2212.59 196.501 5.57413 -8.07197 -217.553 81.2414]; % 2025.11.10
     % B = [-753.279 796.633 -376.577 -133.463 -3.30013 -84.5397 -9.7149]; % (2025.10.13)
     % B = [119.6, -146.1, 187.6, 0, -6.5, 284.3, 0];  % in cm^{-1}
     % B = [567.02 -945.07 1008.10 0 -22.16  936.29  0.854]; % [cm-1] J. Chem. Phys. 53 (9), 1970
@@ -134,16 +134,11 @@ if Options.CEF == true % explicit CEF hamiltonian
         [~, ham_E(:,:,ii,1), basis(:,:,ii,1), ~, ~, ~] = SW_proj(const, ion, params);
         % [~, ham_E(:,:,ii,1), basis(:,:,ii,1), ~, ~, ~] = Ising_proj(const, ion, params);
     end
-    % Calculate A0 from target effective hyperfine and g-factors
-    % The relationship is: A_eff = A0 * g_eff / (2*gJ)
-    % Therefore: A0 = A_eff * (2*gJ) / g_eff
-    % Target effective parameters from spin-1/2 model (lines 150-151):
-    %   A_eff = [-871.1, -871.1, -130.3] MHz
-    %   g_eff = [8.3, 8.3, 1.26]
-    % For Er3+: gJ = gLande(6, 3/2) ≈ 1.20003
-    % Calculate: A0 ≈ mean([-871.1*2*1.2/8.3, -871.1*2*1.2/8.3, -130.3*2*1.2/1.26])
-    %              ≈ mean([-251.8, -251.8, -248.3]) ≈ -250.6 MHz
-    A0_MHz = -250.6; % Corrected scalar hyperfine constant (was -125.9, factor of ~2 error)
+    % Map effective spin-1/2 hyperfine to the isotropic CEF scale:
+    % A_eff = A0 * g_eff / gJ  =>  A0 = A_eff * gJ / g_eff
+    % Target sets: A_eff = [-871.1, -871.1, -130.3] MHz, g_eff = [8.3, 8.3, 1.26],
+    % gJ = gLande(6, 3/2) ≈ 1.20003 gives A0 ≈ -125.9 MHz
+    A0_MHz = -125.9; % Scalar hyperfine constant consistent with target A_eff
     A = (A0_MHz/1000) * const.Gh2mV * [1 1 1];
     params.gE = ion.gLande * [1 1 1];
     params.basis = basis;
