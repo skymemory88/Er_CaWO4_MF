@@ -1,0 +1,27 @@
+# MATLAB autosave files
+*.asv
+
+# MATLAB compiled files
+*.mex*
+*.p
+
+# MATLAB temporary files
+*.m~
+
+# Output files
+diagnostic_output.txt
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# MATLAB session files
+*.mat
+octave-workspace
+
+# Figures (if you want to exclude them)
+# *.fig
+# *.png
+# *.jpg
+# *.eps
