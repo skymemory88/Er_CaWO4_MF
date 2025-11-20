@@ -130,11 +130,19 @@ if option.Bayes && exist('bayesopt', 'file') == 2
     end
 
     meritFcn = @(tbl) bayesObjective(tbl, baseB_cm, fitMask, targetG, L, S, Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData, const, option);
+
+    % Set verbosity level (MATLAB doesn't support ternary operator)
+    if option.verbose
+        verboseLevel = 1;
+    else
+        verboseLevel = 0;
+    end
+
     results = bayesopt(meritFcn, optVars, ...
         'MaxObjectiveEvaluations', 5e3, ...
         'IsObjectiveDeterministic', true, ...
         'AcquisitionFunctionName', 'expected-improvement-plus', ...
-        'Verbose', (option.verbose ? 1 : 0), ...
+        'Verbose', verboseLevel, ...
         'PlotFcn', []);
 
     bestPoint = results.XAtMinObjective;
