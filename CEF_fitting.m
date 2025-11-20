@@ -41,7 +41,7 @@ end
 %% Target and search configuration -----------------------------------------
 targetG = [8.3 8.3 1.26]; % target pseudospin g tensor
 targetAeff_MHz = [-871.1, -871.1, -130.3]; % optional: target effective hyperfine (MHz)
-reportHyperfine = false; % if true, print inferred A0 and A_eff
+reportHyperfine = true; % if true, print inferred A0 and A_eff (IMPORTANT for MF_Er_CaWO4_v1b.m)
 baseB_cm = [-753.279 796.633 -376.577 -133.463 -3.30013 -84.5397 -9.7149];
 fitMask = [true, true, true, true, true, true, true]; % true -> parameter is varied
 
@@ -211,6 +211,14 @@ evals = sort(real(evals));
 evals = evals - mean(evals);
 A0_best = (sum(evals .* eigE_Norm(:))) / (sum(evals .* evals) + eps);
 fprintf('\nZero-field hyperfine scale A0 (units of Eobs16): %.6g\n', A0_best);
+
+% Additional note about using A0 in MF_Er_CaWO4_v1b.m
+if reportHyperfine
+    fprintf('\n*** IMPORTANT for MF_Er_CaWO4_v1b.m: ***\n');
+    fprintf('The recommended A0 value has been calculated above.\n');
+    fprintf('Update line 137 in MF_Er_CaWO4_v1b.m with the recommended A0 (MHz).\n');
+    fprintf('Current value in MF_Er_CaWO4_v1b.m should be A0_MHz = %.2f;\n', A0_rec_MHz);
+end
 
 % Collect stats
 stats = struct();
