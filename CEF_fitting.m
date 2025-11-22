@@ -43,9 +43,10 @@ targetG = [8.3 8.3 1.26]; % target pseudospin g tensor
 targetAeff_MHz = [-871.1, -871.1, -130.3]; % optional: target effective hyperfine (MHz)
 reportHyperfine = true; % if true, print inferred A0 and A_eff (IMPORTANT for MF_Er_CaWO4_v1b.m)
 
-% UPDATED: Use current CEF parameters from MF_Er_CaWO4_v1b.m as baseline (2025.11.10)
-% Old baseline (2025.10.13): [-753.279 796.633 -376.577 -133.463 -3.30013 -84.5397 -9.7149]
-baseB_cm = [-330.74 2212.59 196.501 5.57413 -8.07197 -217.553 81.2414];
+% CORRECTED: Use ACTUAL active CEF parameters from MF_Er_CaWO4_v1b.m line 115 (2025.11.02)
+% Previous WRONG baseline (commented line 116): [-330.74 2212.59 196.501 5.57413 -8.07197 -217.553 81.2414]
+% Older baseline (2025.10.13): [-753.279 796.633 -376.577 -133.463 -3.30013 -84.5397 -9.7149]
+baseB_cm = [-979.402 1898.05 346.52 -272.893 -7.86205 -187.516 58.9021];
 fitMask = [true, true, true, true, true, true, true]; % true -> parameter is varied
 
 L = 6; % Er
@@ -62,7 +63,7 @@ const.Gh2mV = const.hbar * 2*pi * 10^9 * const.J2meV;
 option.Bayes = true; % enable Bayesian optimisation instead of LM (if available)
 option.bounds = false; % toggle simple box bounds in cm^-1
 option.polish = true; % run a local lsqnonlin polish after BayesOpt if available
-option.useSWproj = true; % Use SW_proj (consistent with MF_Er_CaWO4_v1b.m) instead of projectDoublet
+option.useSWproj = false; % Use projectDoublet (MUCH faster) for optimization; verify with SW_proj separately
 option.verbose = true; % Print detailed progress during optimization
 lowerB_cm = baseB_cm - 400; % crude bounds to keep the search stable
 upperB_cm = baseB_cm + 400;
@@ -72,7 +73,7 @@ upperB_cm(~fitMask) = baseB_cm(~fitMask);
 lsqAvailable = exist('lsqnonlin', 'file') == 2;
 if lsqAvailable
     lsqOpts = optimoptions('lsqnonlin', 'Display', 'iter-detailed', ...
-        'StepTolerance', 1e-3, 'FunctionTolerance', 1e-3, 'MaxIterations', 1e4);
+        'StepTolerance', 1e-6, 'FunctionTolerance', 1e-6, 'MaxIterations', 1e4);
     if option.bounds
         freeLower = lowerB_cm(fitMask);
         freeUpper = upperB_cm(fitMask);
@@ -106,7 +107,7 @@ I = 7/2;
 % Residual combines g-tensor misfit and zero-field 16-level spectrum
 % Weighting kept simple and dimensionless
 gTol = 1e-3;  % tightened tolerance for relative g error
-wG = 1.0;     % base g residual weight (scaled by gTol inside residual)
+wG = 100.0;   % base g residual weight (scaled by gTol inside residual) - INCREASED to prioritize g-matching
 wE = 1.0;     % energy residual weight
 objective = @(freeB) fitResidual(freeB, baseB_cm, fitMask, targetG, L, S, ...
                                  Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData, const, option);
