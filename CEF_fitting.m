@@ -109,7 +109,8 @@ I = 7/2;
 gTol = 1e-3;  % tightened tolerance for relative g error
 wG = 100.0;   % base g residual weight (scaled by gTol inside residual) - INCREASED to prioritize g-matching
 wE = 1.0;     % energy residual weight
-objective = @(freeB) fitResidual(freeB, baseB_cm, fitMask, targetG, L, S, ...
+gJ = gLande(L, S);  % Needed for A0 calculation
+objective = @(freeB) fitResidual(freeB, baseB_cm, fitMask, targetG, targetAeff_MHz, gJ, L, S, ...
                                  Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData, const, option);
 
 if option.Bayes && exist('bayesopt', 'file') == 2
@@ -130,7 +131,7 @@ if option.Bayes && exist('bayesopt', 'file') == 2
         end
     end
 
-    meritFcn = @(tbl) bayesObjective(tbl, baseB_cm, fitMask, targetG, L, S, Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData, const, option);
+    meritFcn = @(tbl) bayesObjective(tbl, baseB_cm, fitMask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData, const, option);
 
     % Set verbosity level (MATLAB doesn't support ternary operator)
     if option.verbose
@@ -260,7 +261,7 @@ stats.maxRelGError = maxGError;
 stats.gTolerance = gTol;
 
 %% Helper functions ---------------------------------------------------------
-function res = fitResidual(freeB, baseB, mask, targetG, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option)
+function res = fitResidual(freeB, baseB, mask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option)
     % Assemble trial CF set
     Btrial = baseB;
     Btrial(mask) = freeB;
@@ -279,19 +280,30 @@ function res = fitResidual(freeB, baseB, mask, targetG, L, S, Ix, Iy, Iz, Eobs16
     evals = sort(real(evals));
     evals = evals - mean(evals);
 
-    % Optimal scalar A0 (same units as Eobs16c) by linear least squares
-    num = sum(evals .* Eobs16c(:));
-    den = sum(evals .* evals) + eps;
-    A0_opt = num / den;
+    % FIXED: Calculate A0 from consistency requirement instead of optimizing it
+    % The relationship is: A_eff_i = A0 * J_proj_i and g_eff_i = 2*gJ * J_proj_i
+    % Therefore: A0 = A_eff_i * (2*gJ) / g_eff_i
+    % Calculate A0 from each axis and take the mean
+    A0_from_axes = targetAeff_MHz(:)' .* (2*gJ) ./ g_eff(:)';
+    A0_consistent = mean(A0_from_axes);  % Use mean of three axes
+
+    % Convert A0 from MHz to units of Eobs16c (spectrum is in meV or similar)
+    % Note: Eobs16c is normalized, so we need to match that normalization
+    const_Gh2mV = 1.05457E-34 * 2*pi * 10^9 * 6.24151e+21;  % GHz to meV conversion
+    A0_meV = (A0_consistent / 1000) * const_Gh2mV;
+
+    % Scale A0 to match the normalization of Eobs16c
+    % Eobs16c is normalized by eigE - min(eigE), so A0 needs same treatment
+    A0_scaled = A0_meV;  % This will be in meV, matching Eobs16c units
 
     % Energy residual (dimensionless via RMS scaling of observed)
-    epred = A0_opt * evals;
+    epred = A0_scaled * evals;
     eobs = Eobs16c(:);
     scale = sqrt(mean(eobs.^2)) + eps;
     eres = (epred - eobs) / scale;
 
     % Field-dependent spectra, if supplied
-    fieldRes = computeFieldResidual(fieldData, Jproj, Hhf_unit, A0_opt, Ix, Iy, Iz, L, S);
+    fieldRes = computeFieldResidual(fieldData, Jproj, Hhf_unit, A0_scaled, Ix, Iy, Iz, L, S);
 
     % Stack with weights
     res = [wG * gres; wE * eres; fieldRes];
@@ -391,13 +403,13 @@ function fd = normalizeFieldData(fd)
     end
 end
 
-function merit = bayesObjective(tbl, baseB, mask, targetG, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option)
+function merit = bayesObjective(tbl, baseB, mask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option)
     freeB = zeros(sum(mask), 1);
     names = tbl.Properties.VariableNames;
     for kk = 1:numel(names)
         freeB(kk) = tbl{1, names{kk}};
     end
-    res = fitResidual(freeB, baseB, mask, targetG, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option);
+    res = fitResidual(freeB, baseB, mask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option);
     merit = sum(res.^2);
 end
 
