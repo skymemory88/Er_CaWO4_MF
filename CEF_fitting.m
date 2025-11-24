@@ -46,7 +46,7 @@ reportHyperfine = true; % if true, print inferred A0 and A_eff (IMPORTANT for MF
 % CORRECTED: Use ACTUAL active CEF parameters from MF_Er_CaWO4_v1b.m line 115 (2025.11.02)
 % Previous WRONG baseline (commented line 116): [-330.74 2212.59 196.501 5.57413 -8.07197 -217.553 81.2414]
 % Older baseline (2025.10.13): [-753.279 796.633 -376.577 -133.463 -3.30013 -84.5397 -9.7149]
-baseB_cm = [-979.402 1898.05 346.52 -272.893 -7.86205 -187.516 58.9021];
+baseB_cm = [-546.073, 4263.695, 999.631, 21.982, -64.496, -55.156, -27.176];
 fitMask = [true, true, true, true, true, true, true]; % true -> parameter is varied
 
 L = 6; % Er
@@ -64,7 +64,7 @@ option.Bayes = true; % enable Bayesian optimisation instead of LM (if available)
 option.bounds = false; % toggle simple box bounds in cm^-1
 option.polish = true; % run a local lsqnonlin polish after BayesOpt if available
 option.useSWproj = false; % Use projectDoublet (MUCH faster) for optimization; verify with SW_proj separately
-option.verbose = true; % Print detailed progress during optimization
+option.verbose = false; % Print detailed progress during optimization
 lowerB_cm = baseB_cm - 400; % crude bounds to keep the search stable
 upperB_cm = baseB_cm + 400;
 lowerB_cm(~fitMask) = baseB_cm(~fitMask);
@@ -109,8 +109,7 @@ I = 7/2;
 gTol = 1e-3;  % tolerance for relative g error
 wG = 10.0;    % g-factor residual weight - REBALANCED to allow spectrum influence
 wA = 0.0;     % A_eff residual weight - SET TO 0 (inactive), increase if spectrum fitting insufficient
-wE = 1.0;     % energy (spectrum) residual weight - INCREASED importance vs g-factors
-% Note: To activate A_eff fitting, set wA = 10.0 and optionally reduce wE
+wE = 10.0;     % energy (spectrum) residual weight - INCREASED importance vs g-factors
 
 gJ = gLande(L, S);  % Needed for A0 and A_eff calculation
 objective = @(freeB) fitResidual(freeB, baseB_cm, fitMask, targetG, targetAeff_MHz, gJ, L, S, ...
