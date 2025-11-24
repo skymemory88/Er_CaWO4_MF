@@ -104,14 +104,17 @@ eigE_Norm = eigE - min(eigE); % normalize the eigen-energies
 I = 7/2;
 [~, ~, ~, Ix, Iy, Iz, ~, ~, ~, ~, ~, ~] = spin_operators(L+S, I);
 
-% Residual combines g-tensor misfit and zero-field 16-level spectrum
+% Residual combines g-tensor, A_eff, and zero-field 16-level spectrum
 % Weighting kept simple and dimensionless
-gTol = 1e-3;  % tightened tolerance for relative g error
-wG = 100.0;   % base g residual weight (scaled by gTol inside residual) - INCREASED to prioritize g-matching
-wE = 1.0;     % energy residual weight
-gJ = gLande(L, S);  % Needed for A0 calculation
+gTol = 1e-3;  % tolerance for relative g error
+wG = 10.0;    % g-factor residual weight - REBALANCED to allow spectrum influence
+wA = 0.0;     % A_eff residual weight - SET TO 0 (inactive), increase if spectrum fitting insufficient
+wE = 1.0;     % energy (spectrum) residual weight - INCREASED importance vs g-factors
+% Note: To activate A_eff fitting, set wA = 10.0 and optionally reduce wE
+
+gJ = gLande(L, S);  % Needed for A0 and A_eff calculation
 objective = @(freeB) fitResidual(freeB, baseB_cm, fitMask, targetG, targetAeff_MHz, gJ, L, S, ...
-                                 Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData, const, option);
+                                 Ix, Iy, Iz, eigE_Norm, wG, wA, wE, gTol, fieldData, const, option);
 
 if option.Bayes && exist('bayesopt', 'file') == 2
     fprintf('Running Bayesian optimisation over the selected CEF coefficients...\n');
@@ -131,7 +134,7 @@ if option.Bayes && exist('bayesopt', 'file') == 2
         end
     end
 
-    meritFcn = @(tbl) bayesObjective(tbl, baseB_cm, fitMask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, eigE_Norm, wG, wE, gTol, fieldData, const, option);
+    meritFcn = @(tbl) bayesObjective(tbl, baseB_cm, fitMask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, eigE_Norm, wG, wA, wE, gTol, fieldData, const, option);
 
     % Set verbosity level (MATLAB doesn't support ternary operator)
     if option.verbose
@@ -261,7 +264,7 @@ stats.maxRelGError = maxGError;
 stats.gTolerance = gTol;
 
 %% Helper functions ---------------------------------------------------------
-function res = fitResidual(freeB, baseB, mask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option)
+function res = fitResidual(freeB, baseB, mask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, Eobs16c, wG, wA, wE, gTol, fieldData, const, option)
     % Assemble trial CF set
     Btrial = baseB;
     Btrial(mask) = freeB;
@@ -296,6 +299,13 @@ function res = fitResidual(freeB, baseB, mask, targetG, targetAeff_MHz, gJ, L, S
     % Eobs16c is normalized by eigE - min(eigE), so A0 needs same treatment
     A0_scaled = A0_meV;  % This will be in meV, matching Eobs16c units
 
+    % A_eff residual (NEW - currently inactive with wA=0)
+    % Calculate achieved A_eff from fitted g_eff and consistent A0
+    % A_eff = A0 * g_eff / (2*gJ)
+    A_eff_achieved_MHz = A0_consistent * g_eff(:)' / (2*gJ);
+    Ares = (A_eff_achieved_MHz(:) - targetAeff_MHz(:)) ./ targetAeff_MHz(:);
+    Ares = Ares / gTol;  % Use same tolerance scaling as g residual
+
     % Energy residual (dimensionless via RMS scaling of observed)
     epred = A0_scaled * evals;
     eobs = Eobs16c(:);
@@ -305,8 +315,8 @@ function res = fitResidual(freeB, baseB, mask, targetG, targetAeff_MHz, gJ, L, S
     % Field-dependent spectra, if supplied
     fieldRes = computeFieldResidual(fieldData, Jproj, Hhf_unit, A0_scaled, Ix, Iy, Iz, L, S);
 
-    % Stack with weights
-    res = [wG * gres; wE * eres; fieldRes];
+    % Stack with weights (A_eff residual included but inactive with wA=0)
+    res = [wG * gres; wA * Ares; wE * eres; fieldRes];
 end
 
 function fieldRes = computeFieldResidual(fieldData, Jproj, Hhf_unit, A0_opt, Ix, Iy, Iz, L, S)
@@ -403,13 +413,13 @@ function fd = normalizeFieldData(fd)
     end
 end
 
-function merit = bayesObjective(tbl, baseB, mask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option)
+function merit = bayesObjective(tbl, baseB, mask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, Eobs16c, wG, wA, wE, gTol, fieldData, const, option)
     freeB = zeros(sum(mask), 1);
     names = tbl.Properties.VariableNames;
     for kk = 1:numel(names)
         freeB(kk) = tbl{1, names{kk}};
     end
-    res = fitResidual(freeB, baseB, mask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, Eobs16c, wG, wE, gTol, fieldData, const, option);
+    res = fitResidual(freeB, baseB, mask, targetG, targetAeff_MHz, gJ, L, S, Ix, Iy, Iz, Eobs16c, wG, wA, wE, gTol, fieldData, const, option);
     merit = sum(res.^2);
 end
 
