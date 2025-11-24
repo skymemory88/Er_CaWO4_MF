@@ -13,6 +13,7 @@ fprintf('=================================================================\n\n')
 const.hbar = 1.05457E-34;
 const.muB = 9.274e-24;
 const.muN = 5.05078e-27;
+const.kB = 1.3806e-23; % [J/K]
 const.J2meV = 6.24151e+21;
 const.Gh2mV = const.hbar * 2*pi * 10^9 * const.J2meV;
 
